@@ -1,0 +1,6 @@
+videos/
+transcripts.json
+.venv/
+__pycache__/
+*.pyc
+*.pyo
