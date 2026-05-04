@@ -7,16 +7,24 @@ import tempfile
 # Path to ffmpeg
 os.environ["PATH"] = r"C:\ffmpeg\bin" + os.pathsep + os.environ["PATH"]
 
-MODEL_NAME = "medium"  # tiny, base, small, medium, large
+MODEL_NAME = "medium"
 VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov")
 OUTPUT_FILE = "transcripts.json"
 BASE_DIR = os.path.abspath("videos")
 START_DIR = os.getcwd()
 
+# Загружаем уже готовые данные если файл существует
+if os.path.exists(OUTPUT_FILE):
+    with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+        all_data = json.load(f)
+    done_files = set(d["file"] for d in all_data)
+    print(f"Найден существующий JSON: {len(all_data)} сегментов, {len(done_files)} файлов уже готово")
+else:
+    all_data = []
+    done_files = set()
+
 print(f"Loading model: {MODEL_NAME}")
 model = whisper.load_model(MODEL_NAME)
-
-all_data = []
 
 for root, dirs, files in os.walk(BASE_DIR):
     dirs.sort()
@@ -27,6 +35,11 @@ for root, dirs, files in os.walk(BASE_DIR):
         filepath = os.path.join(root, filename)
         relative_path = os.path.relpath(filepath, BASE_DIR)
 
+        # Пропускаем уже обработанные
+        if relative_path in done_files:
+            print(f"Пропускаем (уже готово): {relative_path}")
+            continue
+
         print(f"Transcribing: {relative_path}")
 
         tmp_path = None
@@ -34,7 +47,6 @@ for root, dirs, files in os.walk(BASE_DIR):
             with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
                 tmp_path = tmp.name
             shutil.copy2(filepath, tmp_path)
-
             result = model.transcribe(tmp_path, language="ru")
         except Exception as e:
             print(f"  ERROR: {e}")
@@ -51,10 +63,10 @@ for root, dirs, files in os.walk(BASE_DIR):
                 "text": segment["text"].strip()
             })
 
+        # Сохраняем после каждого файла
+        with open(os.path.join(START_DIR, OUTPUT_FILE), "w", encoding="utf-8") as f:
+            json.dump(all_data, f, ensure_ascii=False, indent=2)
+
         print(f"  OK, segments: {len(result['segments'])}")
 
-with open(os.path.join(START_DIR, OUTPUT_FILE), "w", encoding="utf-8") as f:
-    json.dump(all_data, f, ensure_ascii=False, indent=2)
-
 print(f"\nDone. Total segments: {len(all_data)}")
-print(f"Saved to: {OUTPUT_FILE}")
